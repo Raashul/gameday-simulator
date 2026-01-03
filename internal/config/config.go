@@ -31,6 +31,25 @@ type PayloadConfig struct {
 	POCOrder          string                 `yaml:"pocOrder"`
 	OrderNumberPrefix string                 `yaml:"orderNumberPrefix"`
 	CustomFields      map[string]interface{} `yaml:"customFields"`
+	BasePolyline      BasePolyline           `yaml:"basePolyline"`
+	Delta             CoordinateDelta        `yaml:"delta"`
+	Boundary          PolygonBoundary        `yaml:"boundary"`
+}
+
+// BasePolyline represents the base GeoJSON polyline coordinates
+type BasePolyline struct {
+	Coordinates [][]float64 `yaml:"coordinates"`
+}
+
+// CoordinateDelta represents the offset to apply for each new order
+type CoordinateDelta struct {
+	Longitude float64 `yaml:"longitude"`
+	Latitude  float64 `yaml:"latitude"`
+}
+
+// PolygonBoundary represents the boundary polygon for volume generation (GeoJSON format)
+type PolygonBoundary struct {
+	Coordinates [][][]float64 `yaml:"coordinates"`
 }
 
 // IntervalConfig defines timing controls

@@ -33,6 +33,7 @@ Thumbs.db
 # Simulation results
 simulation_results.json
 *.log
+logs/
 
 # Temporary files
 tmp/

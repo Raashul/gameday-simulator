@@ -18,6 +18,13 @@ type OrderPayload struct {
 	Timestamp    time.Time              `json:"timestamp"`
 	Type         OrderType              `json:"type"`
 	CustomFields map[string]interface{} `json:"customFields,omitempty"`
+	Geometry     *GeoJSONGeometry       `json:"geometry,omitempty"`
+}
+
+// GeoJSONGeometry represents a GeoJSON geometry (LineString)
+type GeoJSONGeometry struct {
+	Type        string      `json:"type"`
+	Coordinates [][]float64 `json:"coordinates"`
 }
 
 // OrderState represents the current state of an order
