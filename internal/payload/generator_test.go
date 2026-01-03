@@ -1,0 +1,681 @@
+package payload
+
+import (
+	"fmt"
+	"math"
+	"testing"
+
+	"gameday-sim/internal/config"
+)
+
+// floatEquals compares two float64 values with a tolerance
+func floatEquals(a, b, tolerance float64) bool {
+	return math.Abs(a-b) < tolerance
+}
+
+// Test helper: create a standard test config with geographical settings
+func createTestConfigWithGeo() *config.Config {
+	return &config.Config{
+		Simulation: config.SimulationConfig{
+			TotalOrders:    10,
+			ActivatedCount: 7,
+		},
+		Payload: config.PayloadConfig{
+			Location:          "US-EAST-1",
+			POCOrder:          "POC-TEST-001",
+			OrderNumberPrefix: "ORD-TEST-",
+			BasePolyline: config.BasePolyline{
+				Coordinates: [][]float64{
+					{-96.79943798188481, 32.795102753983585},
+					{-96.79927289435462, 32.78885767285452},
+					{-96.79811728164334, 32.780252620552886},
+				},
+			},
+			Delta: config.CoordinateDelta{
+				Longitude: 0.001,
+				Latitude:  0.001,
+			},
+			Boundary: config.PolygonBoundary{
+				Coordinates: [][][]float64{
+					{
+						{-96.80726593015929, 32.796582675082036},
+						{-96.80726593015929, 32.7781210082299},
+						{-96.78175523630775, 32.7781210082299},
+						{-96.78175523630775, 32.796582675082036},
+						{-96.80726593015929, 32.796582675082036},
+					},
+				},
+			},
+		},
+	}
+}
+
+// createSmallBoundaryConfig creates a config with a very small boundary
+// to test boundary constraint enforcement and row transitions
+func createSmallBoundaryConfig() *config.Config {
+	return &config.Config{
+		Simulation: config.SimulationConfig{
+			TotalOrders:    20,
+			ActivatedCount: 15,
+		},
+		Payload: config.PayloadConfig{
+			Location:          "US-EAST-1",
+			POCOrder:          "POC-TEST-001",
+			OrderNumberPrefix: "ORD-TEST-",
+			BasePolyline: config.BasePolyline{
+				Coordinates: [][]float64{
+					{-96.800, 32.795},
+					{-96.800, 32.790},
+				},
+			},
+			Delta: config.CoordinateDelta{
+				Longitude: 0.002,
+				Latitude:  0.001,
+			},
+			Boundary: config.PolygonBoundary{
+				Coordinates: [][][]float64{
+					{
+						{-96.805, 32.800},
+						{-96.805, 32.780},
+						{-96.790, 32.780},
+						{-96.790, 32.800},
+						{-96.805, 32.800},
+					},
+				},
+			},
+		},
+	}
+}
+
+// TestCalculatePolylineHeight tests the vertical extent calculation
+func TestCalculatePolylineHeight(t *testing.T) {
+	const tolerance = 1e-10
+
+	tests := []struct {
+		name     string
+		coords   [][]float64
+		expected float64
+	}{
+		{
+			name:     "empty coordinates",
+			coords:   [][]float64{},
+			expected: 0,
+		},
+		{
+			name: "single point",
+			coords: [][]float64{
+				{-96.79943798188481, 32.795102753983585},
+			},
+			expected: 0,
+		},
+		{
+			name: "two points same latitude",
+			coords: [][]float64{
+				{-96.79943798188481, 32.79},
+				{-96.79800000000000, 32.79},
+			},
+			expected: 0,
+		},
+		{
+			name: "two points different latitude",
+			coords: [][]float64{
+				{-96.79943798188481, 32.795102753983585},
+				{-96.79927289435462, 32.78885767285452},
+			},
+			expected: 32.795102753983585 - 32.78885767285452,
+		},
+		{
+			name: "three points - standard polyline",
+			coords: [][]float64{
+				{-96.79943798188481, 32.795102753983585},
+				{-96.79927289435462, 32.78885767285452},
+				{-96.79811728164334, 32.780252620552886},
+			},
+			expected: 32.795102753983585 - 32.780252620552886,
+		},
+		{
+			name: "coordinates not ordered by latitude",
+			coords: [][]float64{
+				{-96.80, 32.78},
+				{-96.79, 32.79},
+				{-96.78, 32.77},
+			},
+			expected: 0.02,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := calculatePolylineHeight(tt.coords)
+			if !floatEquals(result, tt.expected, tolerance) {
+				t.Errorf("calculatePolylineHeight() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestIsPointInPolygon tests the ray-casting point-in-polygon algorithm
+func TestIsPointInPolygon(t *testing.T) {
+	// Square boundary polygon
+	squareBoundary := [][]float64{
+		{-96.81, 32.80},
+		{-96.81, 32.78},
+		{-96.78, 32.78},
+		{-96.78, 32.80},
+		{-96.81, 32.80}, // Closed polygon
+	}
+
+	// Triangle boundary
+	triangleBoundary := [][]float64{
+		{-96.80, 32.80},
+		{-96.81, 32.78},
+		{-96.79, 32.78},
+		{-96.80, 32.80},
+	}
+
+	// Concave L-shaped polygon
+	lShapedBoundary := [][]float64{
+		{-96.81, 32.80},
+		{-96.81, 32.78},
+		{-96.79, 32.78},
+		{-96.79, 32.79},
+		{-96.80, 32.79},
+		{-96.80, 32.80},
+		{-96.81, 32.80},
+	}
+
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
+
+	tests := []struct {
+		name     string
+		lng      float64
+		lat      float64
+		polygon  [][]float64
+		expected bool
+	}{
+		// Square boundary tests
+		{
+			name:     "point inside square center",
+			lng:      -96.795,
+			lat:      32.79,
+			polygon:  squareBoundary,
+			expected: true,
+		},
+		{
+			name:     "point outside square - west",
+			lng:      -96.82,
+			lat:      32.79,
+			polygon:  squareBoundary,
+			expected: false,
+		},
+		{
+			name:     "point outside square - east",
+			lng:      -96.77,
+			lat:      32.79,
+			polygon:  squareBoundary,
+			expected: false,
+		},
+		{
+			name:     "point outside square - north",
+			lng:      -96.795,
+			lat:      32.81,
+			polygon:  squareBoundary,
+			expected: false,
+		},
+		{
+			name:     "point outside square - south",
+			lng:      -96.795,
+			lat:      32.77,
+			polygon:  squareBoundary,
+			expected: false,
+		},
+		{
+			name:     "point near corner - inside",
+			lng:      -96.809,
+			lat:      32.799,
+			polygon:  squareBoundary,
+			expected: true,
+		},
+		// Triangle boundary tests
+		{
+			name:     "point inside triangle center",
+			lng:      -96.80,
+			lat:      32.79,
+			polygon:  triangleBoundary,
+			expected: true,
+		},
+		{
+			name:     "point outside triangle - right side",
+			lng:      -96.785,
+			lat:      32.79,
+			polygon:  triangleBoundary,
+			expected: false,
+		},
+		// L-shaped polygon tests
+		{
+			name:     "point inside L - bottom section",
+			lng:      -96.80,
+			lat:      32.785,
+			polygon:  lShapedBoundary,
+			expected: true,
+		},
+		{
+			name:     "point in concave area - should be outside",
+			lng:      -96.795,
+			lat:      32.795,
+			polygon:  lShapedBoundary,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := gen.isPointInPolygon(tt.lng, tt.lat, tt.polygon)
+			if result != tt.expected {
+				t.Errorf("isPointInPolygon(%.6f, %.6f) = %v, expected %v",
+					tt.lng, tt.lat, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestIsPolylineInBoundary tests full polyline boundary validation
+func TestIsPolylineInBoundary(t *testing.T) {
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
+
+	tests := []struct {
+		name     string
+		polyline [][]float64
+		expected bool
+	}{
+		{
+			name: "polyline fully inside boundary",
+			polyline: [][]float64{
+				{-96.80, 32.79},
+				{-96.80, 32.785},
+				{-96.80, 32.78},
+			},
+			expected: true,
+		},
+		{
+			name: "polyline with first point outside",
+			polyline: [][]float64{
+				{-96.85, 32.79}, // Outside west
+				{-96.80, 32.785},
+				{-96.80, 32.78},
+			},
+			expected: false,
+		},
+		{
+			name: "polyline with last point outside",
+			polyline: [][]float64{
+				{-96.80, 32.79},
+				{-96.80, 32.785},
+				{-96.75, 32.78}, // Outside east
+			},
+			expected: false,
+		},
+		{
+			name: "polyline with middle point outside",
+			polyline: [][]float64{
+				{-96.80, 32.79},
+				{-96.85, 32.785}, // Outside west
+				{-96.80, 32.78},
+			},
+			expected: false,
+		},
+		{
+			name:     "empty polyline",
+			polyline: [][]float64{},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := gen.isPolylineInBoundary(tt.polyline)
+			if result != tt.expected {
+				t.Errorf("isPolylineInBoundary() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestIsPolylineInBoundary_NoBoundary tests behavior when no boundary is configured
+func TestIsPolylineInBoundary_NoBoundary(t *testing.T) {
+	cfg := &config.Config{
+		Simulation: config.SimulationConfig{
+			TotalOrders:    5,
+			ActivatedCount: 3,
+		},
+		Payload: config.PayloadConfig{
+			Location:          "US-EAST-1",
+			POCOrder:          "POC-TEST-001",
+			OrderNumberPrefix: "ORD-TEST-",
+			BasePolyline: config.BasePolyline{
+				Coordinates: [][]float64{
+					{-96.80, 32.79},
+					{-96.80, 32.78},
+				},
+			},
+			// No boundary configured
+		},
+	}
+
+	gen := NewGenerator(cfg)
+
+	// Any polyline should be valid when no boundary exists
+	polyline := [][]float64{
+		{-200.0, 100.0}, // Invalid coordinates but no boundary check
+		{200.0, -100.0},
+	}
+
+	if !gen.isPolylineInBoundary(polyline) {
+		t.Error("Expected polyline to be valid when no boundary is configured")
+	}
+}
+
+// TestGeneratePolyline_Offset tests that polylines are properly offset
+func TestGeneratePolyline_Offset(t *testing.T) {
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
+
+	// Generate first polyline at (0, 0)
+	first := gen.generatePolyline(0)
+
+	// Generate second polyline - should be at (0, 1) since direction is right
+	second := gen.generatePolyline(1)
+
+	if first == nil || second == nil {
+		t.Fatal("Generated polylines should not be nil")
+	}
+
+	// First polyline should match base coordinates (no offset for row 0, col 0)
+	baseCoords := cfg.Payload.BasePolyline.Coordinates
+	for i, coord := range first.Coordinates {
+		if i < len(baseCoords) {
+			// The first polyline starts at col 0, so longitude offset should be 0
+			expectedLng := baseCoords[i][0]
+			expectedLat := baseCoords[i][1]
+
+			if coord[0] != expectedLng {
+				t.Errorf("First polyline coord[%d] longitude = %v, expected %v", i, coord[0], expectedLng)
+			}
+			if coord[1] != expectedLat {
+				t.Errorf("First polyline coord[%d] latitude = %v, expected %v", i, coord[1], expectedLat)
+			}
+		}
+	}
+
+	// Second polyline should have longitude offset by delta.Longitude
+	deltaLng := cfg.Payload.Delta.Longitude
+	for i, coord := range second.Coordinates {
+		if i < len(baseCoords) {
+			expectedLng := baseCoords[i][0] + deltaLng
+			if coord[0] != expectedLng {
+				t.Errorf("Second polyline coord[%d] longitude = %v, expected %v", i, coord[0], expectedLng)
+			}
+		}
+	}
+}
+
+// TestGeneratePolyline_GeometryType tests that geometry type is correctly set
+func TestGeneratePolyline_GeometryType(t *testing.T) {
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
+
+	geom := gen.generatePolyline(0)
+
+	if geom.Type != "LineString" {
+		t.Errorf("Geometry type = %s, expected LineString", geom.Type)
+	}
+
+	if len(geom.Coordinates) != len(cfg.Payload.BasePolyline.Coordinates) {
+		t.Errorf("Coordinates count = %d, expected %d",
+			len(geom.Coordinates), len(cfg.Payload.BasePolyline.Coordinates))
+	}
+}
+
+// TestZigzagPattern tests the zigzag crawl pattern behavior
+func TestZigzagPattern(t *testing.T) {
+	cfg := createSmallBoundaryConfig()
+	gen := NewGenerator(cfg)
+
+	// Track the column positions to verify zigzag pattern
+	type position struct {
+		row int
+		col int
+		dir int
+	}
+	positions := make([]position, 0)
+
+	// Generate multiple polylines and track positions
+	for i := 0; i < 10; i++ {
+		// Record position before generating
+		pos := position{
+			row: gen.currentRow,
+			col: gen.currentCol,
+			dir: gen.direction,
+		}
+		positions = append(positions, pos)
+
+		gen.generatePolyline(i)
+	}
+
+	// Verify initial direction is right (1)
+	if positions[0].dir != 1 {
+		t.Errorf("Initial direction should be 1 (right), got %d", positions[0].dir)
+	}
+
+	// Verify initial position is row 0, col 0
+	if positions[0].row != 0 || positions[0].col != 0 {
+		t.Errorf("Initial position should be (0,0), got (%d,%d)", positions[0].row, positions[0].col)
+	}
+}
+
+// TestRowStacking tests that rows are properly stacked vertically
+func TestRowStacking(t *testing.T) {
+	cfg := createSmallBoundaryConfig()
+	gen := NewGenerator(cfg)
+
+	polylineHeight := calculatePolylineHeight(cfg.Payload.BasePolyline.Coordinates)
+	expectedRowSpacing := polylineHeight + cfg.Payload.Delta.Latitude
+
+	// Manually test row offset calculation
+	// Row 0: offset = 0
+	// Row 1: offset = -rowSpacing
+	// Row 2: offset = -2 * rowSpacing
+
+	testCases := []struct {
+		row           int
+		expectedOffset float64
+	}{
+		{0, 0},
+		{1, -expectedRowSpacing},
+		{2, -2 * expectedRowSpacing},
+	}
+
+	baseLatitude := cfg.Payload.BasePolyline.Coordinates[0][1]
+
+	for _, tc := range testCases {
+		gen.currentRow = tc.row
+		gen.currentCol = 0
+
+		// Generate polyline and check latitude offset
+		geom := gen.generatePolyline(tc.row)
+
+		expectedLat := baseLatitude + tc.expectedOffset
+		actualLat := geom.Coordinates[0][1]
+
+		// Allow small floating point tolerance
+		tolerance := 0.0000001
+		if diff := expectedLat - actualLat; diff < -tolerance || diff > tolerance {
+			t.Errorf("Row %d: latitude = %v, expected %v (offset: %v)",
+				tc.row, actualLat, expectedLat, tc.expectedOffset)
+		}
+	}
+}
+
+// TestGenerateAll_TypeDistribution tests correct distribution of order types
+func TestGenerateAll_TypeDistribution(t *testing.T) {
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
+
+	payloads := gen.GenerateAll()
+
+	activateCount := 0
+	acceptedCount := 0
+
+	for _, p := range payloads {
+		if p.Type == TypeActivate {
+			activateCount++
+		} else if p.Type == TypeAccepted {
+			acceptedCount++
+		}
+	}
+
+	if activateCount != cfg.Simulation.ActivatedCount {
+		t.Errorf("Activate count = %d, expected %d", activateCount, cfg.Simulation.ActivatedCount)
+	}
+
+	expectedAccepted := cfg.Simulation.TotalOrders - cfg.Simulation.ActivatedCount
+	if acceptedCount != expectedAccepted {
+		t.Errorf("Accepted count = %d, expected %d", acceptedCount, expectedAccepted)
+	}
+}
+
+// TestGenerateAll_GeometryPresent tests that all payloads have geometry
+func TestGenerateAll_GeometryPresent(t *testing.T) {
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
+
+	payloads := gen.GenerateAll()
+
+	for i, p := range payloads {
+		if p.Geometry == nil {
+			t.Errorf("Payload %d has nil geometry", i)
+			continue
+		}
+
+		if p.Geometry.Type != "LineString" {
+			t.Errorf("Payload %d geometry type = %s, expected LineString", i, p.Geometry.Type)
+		}
+
+		if len(p.Geometry.Coordinates) == 0 {
+			t.Errorf("Payload %d has empty coordinates", i)
+		}
+	}
+}
+
+// TestGenerateAll_AllWithinBoundary tests that all generated polylines fall within boundary
+func TestGenerateAll_AllWithinBoundary(t *testing.T) {
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
+
+	payloads := gen.GenerateAll()
+
+	// Create a fresh generator for validation
+	validationGen := NewGenerator(cfg)
+
+	for i, p := range payloads {
+		if p.Geometry == nil {
+			t.Errorf("Payload %d has nil geometry", i)
+			continue
+		}
+
+		if !validationGen.isPolylineInBoundary(p.Geometry.Coordinates) {
+			t.Errorf("Payload %d polyline is outside boundary", i)
+		}
+	}
+}
+
+// TestGenerateAll_NonOverlapping tests that no two polylines share the same position
+func TestGenerateAll_NonOverlapping(t *testing.T) {
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
+
+	payloads := gen.GenerateAll()
+
+	// Create a set to track unique positions based on first coordinate
+	type coordKey struct {
+		lng float64
+		lat float64
+	}
+	positions := make(map[coordKey]int)
+
+	for i, p := range payloads {
+		if p.Geometry == nil || len(p.Geometry.Coordinates) == 0 {
+			continue
+		}
+
+		firstCoord := p.Geometry.Coordinates[0]
+		key := coordKey{lng: firstCoord[0], lat: firstCoord[1]}
+
+		if existing, found := positions[key]; found {
+			t.Errorf("Payload %d has same start position as payload %d: (%.6f, %.6f)",
+				i, existing, key.lng, key.lat)
+		}
+		positions[key] = i
+	}
+}
+
+// TestGenerateAll_UniqueOrderNumbers tests that all order numbers are unique
+func TestGenerateAll_UniqueOrderNumbers(t *testing.T) {
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
+
+	payloads := gen.GenerateAll()
+
+	orderNumbers := make(map[string]int)
+	for i, p := range payloads {
+		if existing, found := orderNumbers[p.OrderNumber]; found {
+			t.Errorf("Duplicate order number %s at indices %d and %d", p.OrderNumber, existing, i)
+		}
+		orderNumbers[p.OrderNumber] = i
+	}
+}
+
+// TestOrderNumberFormat tests the format of generated order numbers
+func TestOrderNumberFormat(t *testing.T) {
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
+
+	payloads := gen.GenerateAll()
+
+	for i, p := range payloads {
+		expected := fmt.Sprintf("ORD-TEST-%06d", i+1)
+		if p.OrderNumber != expected {
+			t.Errorf("Payload %d order number = %s, expected %s", i, p.OrderNumber, expected)
+		}
+	}
+}
+
+// TestCoordinateRanges tests that coordinates fall within valid WGS84 ranges
+func TestCoordinateRanges(t *testing.T) {
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
+
+	payloads := gen.GenerateAll()
+
+	for i, p := range payloads {
+		if p.Geometry == nil {
+			continue
+		}
+
+		for j, coord := range p.Geometry.Coordinates {
+			lng, lat := coord[0], coord[1]
+
+			// Longitude range: -180 to 180
+			if lng < -180 || lng > 180 {
+				t.Errorf("Payload %d, coord %d: longitude %v out of range [-180, 180]", i, j, lng)
+			}
+
+			// Latitude range: -90 to 90
+			if lat < -90 || lat > 90 {
+				t.Errorf("Payload %d, coord %d: latitude %v out of range [-90, 90]", i, j, lat)
+			}
+		}
+	}
+}
