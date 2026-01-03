@@ -1,0 +1,32 @@
+simulation:
+  totalOrders: 200
+  batchSize: 20
+  parallelBatches: 10
+  activatedCount: 170
+
+payload:
+  location: "US-EAST-1"
+  pocOrder: "POC-2024-001"
+  orderNumberPrefix: "ORD-2024-"
+  customFields:
+    priority: "normal"
+    source: "simulator"
+
+intervals:
+  betweenCreates: 2s
+  afterCreateBeforeGet: 5s
+  betweenGetPolls: 3s
+  beforeActivate: 2s
+  beforeCancel: 30s
+  beforeEnd: 60s
+
+api:
+  baseUrl: "https://api.example.com"
+  timeout: 30s
+  retryMax: 3
+  retryBackoff: 2s
+
+cleanup:
+  cancelTimeout: 300s
+  endTimeout: 600s
+  checkInterval: 10s
