@@ -44,7 +44,7 @@ api:
   retryBackoff: 2s
 
 oauth:
-  tokenUrl: "https://oauthprd.flyanra.net/auth/realms/prod/protocol/openid-connect/token"
+  tokenUrl: "url"
   username: "your-username"
   password: "your-password"
   clientId: "your-client-id"
