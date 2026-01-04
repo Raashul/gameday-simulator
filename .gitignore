@@ -30,6 +30,9 @@ go.work
 .DS_Store
 Thumbs.db
 
+# Configuration with credentials
+config.yaml
+
 # Simulation results
 simulation_results.json
 *.log

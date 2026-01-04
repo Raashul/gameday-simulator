@@ -83,3 +83,18 @@ func (c *Client) EndOrder(ctx context.Context, orderID string) (*EndOrderRespons
 
 	return &resp, nil
 }
+
+// EndOrder calls the end order API
+func (c *Client) GenerateToken(ctx context.Context, orderID string) (*OauthResponse, error) {
+	req := OauthRequest{
+		GrantType: "password",
+	}
+
+	var resp OauthResponse
+	err := c.executeRequest(ctx, http.MethodPost, "/token", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}

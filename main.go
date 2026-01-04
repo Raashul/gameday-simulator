@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"gameday-sim/internal/api"
 	"gameday-sim/internal/config"
 	"gameday-sim/internal/payload"
 	"gameday-sim/internal/simulator"
@@ -77,7 +78,7 @@ func main() {
 }
 
 func runSimulation(ctx context.Context, cfg *config.Config, logger *utils.Logger) error {
-	//startTime := time.Now()
+	startTime := time.Now()
 
 	// Phase 1: Generate payloads
 	logger.Info("Phase 1: Generating payloads", nil)
@@ -88,43 +89,58 @@ func runSimulation(ctx context.Context, cfg *config.Config, logger *utils.Logger
 		"totalPayloads": len(payloads),
 	})
 
-	// Phase 2: Distribute into batches
-	// logger.Info("Phase 2: Distributing payloads into batches", nil)
-	// distributor := payload.NewDistributor(cfg.Simulation.BatchSize)
-	// batches := distributor.Distribute(payloads)
+	//	Phase 2: Distribute into batches
+	logger.Info("Phase 2: Distributing payloads into batches", nil)
+	distributor := payload.NewDistributor(cfg.Simulation.BatchSize)
+	batches := distributor.Distribute(payloads)
 
-	// if err := payload.ValidateBatches(batches); err != nil {
-	// 	return fmt.Errorf("batch validation failed: %w", err)
-	// }
+	if err := payload.ValidateBatches(batches); err != nil {
+		return fmt.Errorf("batch validation failed: %w", err)
+	}
 
-	// stats := distributor.GetBatchStats(batches)
-	// logger.Info("Batches created", stats)
+	stats := distributor.GetBatchStats(batches)
+	logger.Info("Batches created", stats)
 
-	// // Phase 3: Initialize API client
-	// logger.Info("Phase 3: Initializing API client", nil)
-	// apiClient := api.NewClient(cfg)
+	// Phase 3: Initialize authentication
+	logger.Info("Phase 3: Initializing authentication", nil)
+	authManager := api.NewAuthManager(&cfg.OAuth, cfg.API.Timeout)
 
-	// // Phase 4: Process batches
-	// logger.Info("Phase 4: Processing batches", map[string]interface{}{
-	// 	"parallelBatches": cfg.Simulation.ParallelBatches,
-	// })
+	// Generate initial token
+	logger.Info("Generating authentication token", nil)
+	token, err := authManager.GetToken(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to generate auth token: %w", err)
+	}
+	logger.Info("Authentication token generated successfully", map[string]interface{}{
+		"tokenLength": len(token),
+	})
 
-	// batchProcessor := simulator.NewBatchProcessor(apiClient, cfg)
-	// result, err := batchProcessor.ProcessBatches(ctx, batches)
-	// if err != nil {
-	// 	return fmt.Errorf("batch processing failed: %w", err)
-	// }
+	// Phase 4: Initialize API client with authentication
+	logger.Info("Phase 4: Initializing API client", nil)
+	apiClient := api.NewClient(cfg, authManager)
 
-	// // Phase 5: Report results
-	// logger.Info("Phase 5: Generating reports", nil)
-	// printResults(result, logger, time.Since(startTime))
+	// Phase 5: Process batches
+	logger.Info("Phase 5: Processing batches", map[string]interface{}{
+		"parallelBatches": cfg.Simulation.ParallelBatches,
+	})
 
-	// // Save detailed results to JSON
-	// if err := saveResultsToJSON(result, "simulation_results.json"); err != nil {
-	// 	logger.Warn("Failed to save results to JSON", map[string]interface{}{
-	// 		"error": err.Error(),
-	// 	})
-	// }
+	batchProcessor := simulator.NewBatchProcessor(apiClient, cfg)
+	batchProcessor.StartTerminationWorker(ctx)
+	result, err := batchProcessor.ProcessBatches(ctx, batches)
+	if err != nil {
+		return fmt.Errorf("batch processing failed: %w", err)
+	}
+
+	// Phase 6: Report results
+	logger.Info("Phase 6: Generating reports", nil)
+	printResults(result, logger, time.Since(startTime))
+
+	// Save detailed results to JSON
+	if err := saveResultsToJSON(result, "simulation_results.json"); err != nil {
+		logger.Warn("Failed to save results to JSON", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
 
 	return nil
 }

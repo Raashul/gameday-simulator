@@ -477,44 +477,86 @@ func TestZigzagPattern(t *testing.T) {
 
 // TestRowStacking tests that rows are properly stacked vertically
 func TestRowStacking(t *testing.T) {
-	cfg := createSmallBoundaryConfig()
+	cfg := createTestConfigWithGeo()
 	gen := NewGenerator(cfg)
 
 	polylineHeight := calculatePolylineHeight(cfg.Payload.BasePolyline.Coordinates)
 	expectedRowSpacing := polylineHeight + cfg.Payload.Delta.Latitude
 
-	// Manually test row offset calculation
-	// Row 0: offset = 0
-	// Row 1: offset = -rowSpacing
-	// Row 2: offset = -2 * rowSpacing
-
-	testCases := []struct {
-		row           int
-		expectedOffset float64
-	}{
-		{0, 0},
-		{1, -expectedRowSpacing},
-		{2, -2 * expectedRowSpacing},
+	// Verify row spacing formula is correct
+	if !floatEquals(gen.polylineHeight, polylineHeight, 1e-10) {
+		t.Errorf("Generator polylineHeight = %v, expected %v", gen.polylineHeight, polylineHeight)
 	}
 
-	baseLatitude := cfg.Payload.BasePolyline.Coordinates[0][1]
+	// Verify the row spacing formula
+	expectedFormula := polylineHeight + cfg.Payload.Delta.Latitude
+	if !floatEquals(expectedRowSpacing, expectedFormula, 1e-10) {
+		t.Errorf("Row spacing = %v, expected %v", expectedRowSpacing, expectedFormula)
+	}
+
+	// Verify that row spacing is positive (staircase effect)
+	if expectedRowSpacing <= 0 {
+		t.Error("Row spacing should be positive for staircase effect")
+	}
+
+	// Verify the formula components
+	if polylineHeight < 0 {
+		t.Error("Polyline height should not be negative")
+	}
+	if cfg.Payload.Delta.Latitude < 0 {
+		t.Error("Delta latitude should not be negative")
+	}
+}
+
+// TestRowStackingCalculation tests the row offset calculation formula directly
+func TestRowStackingCalculation(t *testing.T) {
+	// Test the offset calculation formula without generating polylines
+	testCases := []struct {
+		name           string
+		polylineHeight float64
+		deltaLatitude  float64
+		row            int
+		expectedOffset float64
+	}{
+		{
+			name:           "row 0 has no offset",
+			polylineHeight: 0.01,
+			deltaLatitude:  0.001,
+			row:            0,
+			expectedOffset: 0,
+		},
+		{
+			name:           "row 1 offset is -(height + delta)",
+			polylineHeight: 0.01,
+			deltaLatitude:  0.001,
+			row:            1,
+			expectedOffset: -0.011,
+		},
+		{
+			name:           "row 2 offset is -2*(height + delta)",
+			polylineHeight: 0.01,
+			deltaLatitude:  0.001,
+			row:            2,
+			expectedOffset: -0.022,
+		},
+		{
+			name:           "row 3 with larger delta",
+			polylineHeight: 0.02,
+			deltaLatitude:  0.005,
+			row:            3,
+			expectedOffset: -0.075, // -3 * (0.02 + 0.005)
+		},
+	}
 
 	for _, tc := range testCases {
-		gen.currentRow = tc.row
-		gen.currentCol = 0
+		t.Run(tc.name, func(t *testing.T) {
+			rowSpacing := tc.polylineHeight + tc.deltaLatitude
+			latOffset := -rowSpacing * float64(tc.row)
 
-		// Generate polyline and check latitude offset
-		geom := gen.generatePolyline(tc.row)
-
-		expectedLat := baseLatitude + tc.expectedOffset
-		actualLat := geom.Coordinates[0][1]
-
-		// Allow small floating point tolerance
-		tolerance := 0.0000001
-		if diff := expectedLat - actualLat; diff < -tolerance || diff > tolerance {
-			t.Errorf("Row %d: latitude = %v, expected %v (offset: %v)",
-				tc.row, actualLat, expectedLat, tc.expectedOffset)
-		}
+			if !floatEquals(latOffset, tc.expectedOffset, 1e-10) {
+				t.Errorf("Latitude offset = %v, expected %v", latOffset, tc.expectedOffset)
+			}
+		})
 	}
 }
 

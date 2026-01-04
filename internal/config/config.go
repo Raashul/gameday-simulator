@@ -14,6 +14,7 @@ type Config struct {
 	Payload    PayloadConfig    `yaml:"payload"`
 	Intervals  IntervalConfig   `yaml:"intervals"`
 	API        APIConfig        `yaml:"api"`
+	OAuth      OAuthConfig      `yaml:"oauth"`
 	Cleanup    CleanupConfig    `yaml:"cleanup"`
 }
 
@@ -68,6 +69,16 @@ type APIConfig struct {
 	Timeout      time.Duration `yaml:"timeout"`
 	RetryMax     int           `yaml:"retryMax"`
 	RetryBackoff time.Duration `yaml:"retryBackoff"`
+}
+
+// OAuthConfig defines OAuth authentication settings
+type OAuthConfig struct {
+	TokenURL     string `yaml:"tokenUrl"`
+	Username     string `yaml:"username"`
+	Password     string `yaml:"password"`
+	ClientID     string `yaml:"clientId"`
+	ClientSecret string `yaml:"clientSecret"`
+	GrantType    string `yaml:"grantType"`
 }
 
 // CleanupConfig defines cleanup phase settings
@@ -125,6 +136,22 @@ func (c *Config) Validate() error {
 
 	if c.API.Timeout <= 0 {
 		return fmt.Errorf("API timeout must be positive")
+	}
+
+	if c.OAuth.TokenURL == "" {
+		return fmt.Errorf("OAuth tokenUrl is required")
+	}
+
+	if c.OAuth.Username == "" {
+		return fmt.Errorf("OAuth username is required")
+	}
+
+	if c.OAuth.Password == "" {
+		return fmt.Errorf("OAuth password is required")
+	}
+
+	if c.OAuth.ClientID == "" {
+		return fmt.Errorf("OAuth clientId is required")
 	}
 
 	return nil

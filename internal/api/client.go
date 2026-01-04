@@ -14,21 +14,23 @@ import (
 
 // Client represents the API client
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
-	retryMax   int
-	backoff    time.Duration
+	baseURL     string
+	httpClient  *http.Client
+	retryMax    int
+	backoff     time.Duration
+	authManager *AuthManager
 }
 
-// NewClient creates a new API client
-func NewClient(cfg *config.Config) *Client {
+// NewClient creates a new API client with authentication
+func NewClient(cfg *config.Config, authManager *AuthManager) *Client {
 	return &Client{
 		baseURL: cfg.API.BaseURL,
 		httpClient: &http.Client{
 			Timeout: cfg.API.Timeout,
 		},
-		retryMax: cfg.API.RetryMax,
-		backoff:  cfg.API.RetryBackoff,
+		retryMax:    cfg.API.RetryMax,
+		backoff:     cfg.API.RetryBackoff,
+		authManager: authManager,
 	}
 }
 
@@ -85,6 +87,15 @@ func (c *Client) executeRequest(ctx context.Context, method, path string, body i
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+
+	// Inject authentication token
+	if c.authManager != nil {
+		token, err := c.authManager.GetToken(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get auth token: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

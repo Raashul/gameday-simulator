@@ -1,6 +1,11 @@
 package api
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"time"
+)
 
 // CreateOrderRequest represents the request to create an order
 type CreateOrderRequest struct {
@@ -73,4 +78,31 @@ type ErrorResponse struct {
 	Error     string `json:"error"`
 	Message   string `json:"message"`
 	RequestID string `json:"requestId,omitempty"`
+}
+
+// OauthResponse represents an API error response
+type OauthResponse struct {
+	AccessToken string `json:"access_token"`
+}
+
+// EndOrderRequest represents the request to end an order
+type OauthRequest struct {
+	GrantType string `json:"grant_type"`
+	ClientID  string `json:"client_id"`
+	Username  string `json:"username"`
+	Password  string `json:"password"`
+}
+
+// parseJSONResponse parses JSON from an io.Reader into target
+func parseJSONResponse(r io.Reader, target interface{}) error {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if err := json.Unmarshal(data, target); err != nil {
+		return fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	return nil
 }

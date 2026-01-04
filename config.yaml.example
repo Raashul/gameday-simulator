@@ -21,14 +21,14 @@ payload:
     latitude: 0.001
   boundary:
     coordinates:
-      - - [ -96.80150415798052, 32.79596775075609] 
+      - - [ -96.80150415798052, 32.79596775075609]
         - [ -96.80150415798052,
               32.74600206482641]
         - [ -96.79217605335973,
               32.74600206482641]
         - [ -96.79217605335973,
               32.79596775075609]
-        - [ -96.80150415798052, 32.79596775075609] 
+        - [ -96.80150415798052, 32.79596775075609]
 intervals:
   betweenCreates: 2s
   afterCreateBeforeGet: 5s
@@ -44,7 +44,7 @@ api:
   retryBackoff: 2s
 
 oauth:
-  tokenUrl: "https://oauthprd.flyanra.net/auth/realms/prod/protocol/openid-connect/token"
+  tokenUrl: "https://your-oauth-server.com/auth/realms/your-realm/protocol/openid-connect/token"
   username: "your-username"
   password: "your-password"
   clientId: "your-client-id"
