@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	configPath = flag.String("config", "config.yaml", "Path to configuration file")
+	configPath = flag.String("config", "config_dev.yaml", "Path to configuration file")
 	logLevel   = flag.String("log-level", "INFO", "Log level (DEBUG, INFO, WARN, ERROR)")
 )
 
@@ -27,6 +27,7 @@ func main() {
 
 	// Initialize logger
 	logger := utils.NewLogger(utils.LogLevel(*logLevel))
+	defer logger.Close()
 	logger.Info("Starting Day-in-Life Simulator", nil)
 
 	// Load configuration

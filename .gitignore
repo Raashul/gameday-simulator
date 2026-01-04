@@ -32,6 +32,8 @@ Thumbs.db
 
 # Configuration with credentials
 config.yaml
+config_dev.yaml
+
 
 # Simulation results
 simulation_results.json
