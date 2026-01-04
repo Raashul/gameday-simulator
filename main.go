@@ -127,25 +127,29 @@ func runSimulation(ctx context.Context, cfg *config.Config, logger *utils.Logger
 
 	batchProcessor := simulator.NewBatchProcessor(apiClient, cfg)
 	batchProcessor.StartTerminationWorker(ctx)
+
+	//Start Batch Processing
 	result, err := batchProcessor.ProcessBatches(ctx, batches)
 	if err != nil {
 		return fmt.Errorf("batch processing failed: %w", err)
 	}
 
+	//TODO: add cleaner reporting -> save to report folder with metrics
 	// Phase 6: Report results
 	logger.Info("Phase 6: Generating reports", nil)
 	printResults(result, logger, time.Since(startTime))
 
 	// Save detailed results to JSON
-	if err := saveResultsToJSON(result, "simulation_results.json"); err != nil {
-		logger.Warn("Failed to save results to JSON", map[string]interface{}{
-			"error": err.Error(),
-		})
-	}
+	// if err := saveResultsToJSON(result, "simulation_results.json"); err != nil {
+	// 	logger.Warn("Failed to save results to JSON", map[string]interface{}{
+	// 		"error": err.Error(),
+	// 	})
+	// }
 
 	return nil
 }
 
+// TODO: move to util folder or somewhere idk
 func printResults(result *simulator.SimulationResult, logger *utils.Logger, totalDuration time.Duration) {
 	stats := result.GetStats()
 
@@ -180,6 +184,7 @@ func saveResultsToJSON(result *simulator.SimulationResult, filename string) erro
 }
 
 // repeatString repeats a string n times
+// TODO: move to util folder or somewhere idk
 func repeatString(s string, count int) string {
 	result := ""
 	for i := 0; i < count; i++ {
