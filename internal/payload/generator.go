@@ -15,6 +15,7 @@ import (
 // Generator handles payload generation
 type Generator struct {
 	config         *config.Config
+	payloadData    *config.PayloadData
 	rng            *rand.Rand
 	currentRow     int
 	currentCol     int
@@ -24,15 +25,16 @@ type Generator struct {
 }
 
 // NewGenerator creates a new payload generator
-func NewGenerator(cfg *config.Config) *Generator {
+func NewGenerator(cfg *config.Config, payloadData *config.PayloadData) *Generator {
 	// Calculate polyline vertical extent
-	polylineHeight := calculatePolylineHeight(cfg.Payload.BasePolyline.Coordinates)
+	polylineHeight := calculatePolylineHeight(payloadData.BasePolyline.Coordinates)
 
 	log.Printf("Generator initialized: polylineHeight=%.17f, delta.Lat=%.17f, rowSpacing=%.17f",
-		polylineHeight, cfg.Payload.Delta.Latitude, polylineHeight+cfg.Payload.Delta.Latitude)
+		polylineHeight, payloadData.Delta.Latitude, polylineHeight+payloadData.Delta.Latitude)
 
 	return &Generator{
 		config:         cfg,
+		payloadData:    payloadData,
 		rng:            rand.New(rand.NewSource(time.Now().UnixNano())),
 		currentRow:     0,
 		currentCol:     0,
@@ -128,16 +130,16 @@ func (g *Generator) generatePayload(index int, orderType OrderType) OrderPayload
 
 // generatePolyline creates a GeoJSON LineString with offset based on zigzag pattern
 func (g *Generator) generatePolyline(index int) *GeoJSONGeometry {
-	baseCoords := g.config.Payload.BasePolyline.Coordinates
+	baseCoords := g.payloadData.BasePolyline.Coordinates
 
 	// Try to place the polyline, adjusting position if needed
 	for {
 		// Calculate offset based on current position
-		lngOffset := g.config.Payload.Delta.Longitude * float64(g.currentCol)
+		lngOffset := g.payloadData.Delta.Longitude * float64(g.currentCol)
 
 		// Row offset includes the full polyline height + delta spacing
 		// This ensures rows are stacked like stairs, not overlapping
-		rowSpacing := g.polylineHeight + g.config.Payload.Delta.Latitude
+		rowSpacing := g.polylineHeight + g.payloadData.Delta.Latitude
 		latOffset := -rowSpacing * float64(g.currentRow) // Negative to move down (south)
 
 		// Create candidate coordinates
@@ -187,7 +189,7 @@ func (g *Generator) generatePolyline(index int) *GeoJSONGeometry {
 
 // isPolylineInBoundary checks if all points of a polyline are within the boundary polygon
 func (g *Generator) isPolylineInBoundary(polyline [][]float64) bool {
-	boundary := g.config.Payload.Boundary.Coordinates
+	boundary := g.payloadData.Boundary.Coordinates
 
 	// If no boundary is configured, allow all positions
 	if len(boundary) == 0 {
@@ -241,7 +243,7 @@ func (g *Generator) DumpGeoJSON(payloads []OrderPayload) {
 	features := []map[string]interface{}{}
 
 	// Add boundary polygon as first feature
-	if len(g.config.Payload.Boundary.Coordinates) > 0 {
+	if len(g.payloadData.Boundary.Coordinates) > 0 {
 		boundaryFeature := map[string]interface{}{
 			"type": "Feature",
 			"properties": map[string]interface{}{
@@ -253,7 +255,7 @@ func (g *Generator) DumpGeoJSON(payloads []OrderPayload) {
 			},
 			"geometry": map[string]interface{}{
 				"type":        "Polygon",
-				"coordinates": g.config.Payload.Boundary.Coordinates,
+				"coordinates": g.payloadData.Boundary.Coordinates,
 			},
 		}
 		features = append(features, boundaryFeature)
@@ -269,7 +271,7 @@ func (g *Generator) DumpGeoJSON(payloads []OrderPayload) {
 		},
 		"geometry": map[string]interface{}{
 			"type":        "LineString",
-			"coordinates": g.config.Payload.BasePolyline.Coordinates,
+			"coordinates": g.payloadData.BasePolyline.Coordinates,
 		},
 	}
 	features = append(features, baseFeature)

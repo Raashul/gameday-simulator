@@ -7,14 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"gameday-sim/internal/api"
 	"gameday-sim/internal/cleanup"
 	"gameday-sim/internal/config"
 	"gameday-sim/internal/payload"
-	"gameday-sim/internal/reporter"
-	"gameday-sim/internal/simulator"
 	"gameday-sim/internal/utils"
 )
 
@@ -139,83 +136,91 @@ func runCleanupMode(timestamp string, logger *utils.Logger) {
 }
 
 func runSimulation(ctx context.Context, cfg *config.Config, logger *utils.Logger) error {
-	startTime := time.Now()
+	//startTime := time.Now()
 
-	// Phase 1: Generate payloads
-	logger.Info("Phase 1: Generating payloads", nil)
-	generator := payload.NewGenerator(cfg)
+	// Phase 1: Load payload data
+	logger.Info("Phase 1: Loading payload configuration", nil)
+	payloadData, err := config.LoadPayloadData("payload/payload.json")
+	if err != nil {
+		return fmt.Errorf("failed to load payload data: %w", err)
+	}
+	logger.Info("Payload configuration loaded", nil)
+
+	// Phase 2: Generate payloads
+	logger.Info("Phase 2: Generating payloads", nil)
+	generator := payload.NewGenerator(cfg, payloadData)
 	payloads := generator.GenerateAll()
 	generator.DumpGeoJSON(payloads)
 	logger.Info("Payloads generated", map[string]interface{}{
 		"totalPayloads": len(payloads),
 	})
 
-	//	Phase 2: Distribute into batches
-	logger.Info("Phase 2: Distributing payloads into batches", nil)
-	distributor := payload.NewDistributor(cfg.Simulation.BatchSize)
-	batches := distributor.Distribute(payloads)
+	//	Phase 3: Distribute into batches
+	// logger.Info("Phase 3: Distributing payloads into batches", nil)
+	// distributor := payload.NewDistributor(cfg.Simulation.BatchSize)
+	// batches := distributor.Distribute(payloads)
 
-	if err := payload.ValidateBatches(batches); err != nil {
-		return fmt.Errorf("batch validation failed: %w", err)
-	}
-
-	stats := distributor.GetBatchStats(batches)
-	logger.Info("Batches created", stats)
-
-	// Phase 3: Initialize authentication
-	logger.Info("Phase 3: Initializing authentication", nil)
-	authManager := api.NewAuthManager(&cfg.OAuth, cfg.API.Timeout)
-
-	// Generate initial token
-	logger.Info("Generating authentication token", nil)
-	token, err := authManager.GetToken(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to generate auth token: %w", err)
-	}
-	logger.Info("Authentication token generated successfully", map[string]interface{}{
-		"tokenLength": len(token),
-	})
-
-	// Phase 4: Initialize API client with authentication
-	logger.Info("Phase 4: Initializing API client", nil)
-	apiClient := api.NewClient(cfg, authManager)
-
-	// Phase 5: Initialize operations tracker
-	logger.Info("Phase 5: Initializing operations tracker", nil)
-	opsTracker, err := utils.NewOperationsTracker()
-	if err != nil {
-		return fmt.Errorf("failed to create operations tracker: %w", err)
-	}
-	defer opsTracker.Close()
-	logger.Info("Operations tracker created", map[string]interface{}{
-		"timestamp": opsTracker.GetTimestamp(),
-	})
-
-	// Phase 6: Process batches
-	logger.Info("Phase 6: Processing batches", map[string]interface{}{
-		"parallelBatches": cfg.Simulation.ParallelBatches,
-	})
-
-	batchProcessor := simulator.NewBatchProcessor(apiClient, cfg, opsTracker)
-	batchProcessor.StartTerminationWorker(ctx)
-
-	//Start Batch Processing
-	result, err := batchProcessor.ProcessBatches(ctx, batches)
-	if err != nil {
-		return fmt.Errorf("batch processing failed: %w", err)
-	}
-
-	//TODO: add cleaner reporting -> save to report folder with metrics
-	// Phase 7: Report results
-	logger.Info("Phase 7: Generating reports", nil)
-	reporter.PrintResults(result, logger, time.Since(startTime))
-
-	// Save detailed results to JSON
-	// if err := reporter.SaveResultsToJSON(result, "simulation_results.json"); err != nil {
-	// 	logger.Warn("Failed to save results to JSON", map[string]interface{}{
-	// 		"error": err.Error(),
-	// 	})
+	// if err := payload.ValidateBatches(batches); err != nil {
+	// 	return fmt.Errorf("batch validation failed: %w", err)
 	// }
+
+	// stats := distributor.GetBatchStats(batches)
+	// logger.Info("Batches created", stats)
+
+	// // Phase 4: Initialize authentication
+	// logger.Info("Phase 4: Initializing authentication", nil)
+	// authManager := api.NewAuthManager(&cfg.OAuth, cfg.API.Timeout)
+
+	// // Generate initial token
+	// logger.Info("Generating authentication token", nil)
+	// token, err := authManager.GetToken(ctx)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to generate auth token: %w", err)
+	// }
+	// logger.Info("Authentication token generated successfully", map[string]interface{}{
+	// 	"tokenLength": len(token),
+	// })
+
+	// // Phase 5: Initialize API client with authentication
+	// logger.Info("Phase 5: Initializing API client", nil)
+	// apiClient := api.NewClient(cfg, authManager)
+
+	// // Phase 6: Initialize operations tracker
+	// logger.Info("Phase 6: Initializing operations tracker", nil)
+	// opsTracker, err := utils.NewOperationsTracker()
+	// if err != nil {
+	// 	return fmt.Errorf("failed to create operations tracker: %w", err)
+	// }
+	// defer opsTracker.Close()
+	// logger.Info("Operations tracker created", map[string]interface{}{
+	// 	"timestamp": opsTracker.GetTimestamp(),
+	// })
+
+	// // Phase 7: Process batches
+	// logger.Info("Phase 7: Processing batches", map[string]interface{}{
+	// 	"parallelBatches": cfg.Simulation.ParallelBatches,
+	// })
+
+	// batchProcessor := simulator.NewBatchProcessor(apiClient, cfg, opsTracker)
+	// batchProcessor.StartTerminationWorker(ctx)
+
+	// //Start Batch Processing
+	// result, err := batchProcessor.ProcessBatches(ctx, batches)
+	// if err != nil {
+	// 	return fmt.Errorf("batch processing failed: %w", err)
+	// }
+
+	// //TODO: add cleaner reporting -> save to report folder with metrics
+	// // Phase 8: Report results
+	// logger.Info("Phase 8: Generating reports", nil)
+	// reporter.PrintResults(result, logger, time.Since(startTime))
+
+	// // Save detailed results to JSON
+	// // if err := reporter.SaveResultsToJSON(result, "simulation_results.json"); err != nil {
+	// // 	logger.Warn("Failed to save results to JSON", map[string]interface{}{
+	// // 		"error": err.Error(),
+	// // 	})
+	// // }
 
 	return nil
 }

@@ -23,7 +23,20 @@ func TestPayloadGeneration(t *testing.T) {
 		},
 	}
 
-	generator := payload.NewGenerator(cfg)
+	payloadData := &config.PayloadData{
+		BasePolyline: config.BasePolyline{
+			Coordinates: [][]float64{
+				{-96.80, 32.79},
+				{-96.80, 32.78},
+			},
+		},
+		Delta: config.CoordinateDelta{
+			Longitude: 0.001,
+			Latitude:  0.001,
+		},
+	}
+
+	generator := payload.NewGenerator(cfg, payloadData)
 	payloads := generator.GenerateAll()
 
 	// Test total count
@@ -63,7 +76,7 @@ func TestPayloadGeneration(t *testing.T) {
 }
 
 func TestBatchDistribution(t *testing.T) {
-	generator := payload.NewGenerator(&config.Config{
+	cfg := &config.Config{
 		Simulation: config.SimulationConfig{
 			TotalOrders:    100,
 			ActivatedCount: 70,
@@ -73,8 +86,22 @@ func TestBatchDistribution(t *testing.T) {
 			POCOrder:          "POC-TEST-001",
 			OrderNumberPrefix: "ORD-TEST-",
 		},
-	})
+	}
 
+	payloadData := &config.PayloadData{
+		BasePolyline: config.BasePolyline{
+			Coordinates: [][]float64{
+				{-96.80, 32.79},
+				{-96.80, 32.78},
+			},
+		},
+		Delta: config.CoordinateDelta{
+			Longitude: 0.001,
+			Latitude:  0.001,
+		},
+	}
+
+	generator := payload.NewGenerator(cfg, payloadData)
 	payloads := generator.GenerateAll()
 
 	distributor := payload.NewDistributor(20)
@@ -120,6 +147,13 @@ func TestConfigValidation(t *testing.T) {
 				API: config.APIConfig{
 					BaseURL: "https://api.example.com",
 					Timeout: 30,
+				},
+				OAuth: config.OAuthConfig{
+					TokenURL:  "https://oauth.example.com/token",
+					Username:  "test",
+					Password:  "test",
+					ClientID:  "test-client",
+					GrantType: "password",
 				},
 			},
 			shouldError: false,
