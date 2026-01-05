@@ -9,6 +9,7 @@ import (
 	"gameday-sim/internal/api"
 	"gameday-sim/internal/config"
 	"gameday-sim/internal/payload"
+	"gameday-sim/internal/utils"
 )
 
 // BatchProcessor handles parallel batch processing
@@ -17,17 +18,19 @@ type BatchProcessor struct {
 	config          *config.Config
 	orderProcessor  *OrderProcessor
 	terminationChan chan TerminationRequest
+	opsTracker      *utils.OperationsTracker
 }
 
 // NewBatchProcessor creates a new batch processor
-func NewBatchProcessor(apiClient *api.Client, cfg *config.Config) *BatchProcessor {
+func NewBatchProcessor(apiClient *api.Client, cfg *config.Config, opsTracker *utils.OperationsTracker) *BatchProcessor {
 	terminationChan := make(chan TerminationRequest, 1000)
 
 	return &BatchProcessor{
 		apiClient:       apiClient,
 		config:          cfg,
 		terminationChan: terminationChan,
-		orderProcessor:  NewOrderProcessor(apiClient, cfg, terminationChan),
+		opsTracker:      opsTracker,
+		orderProcessor:  NewOrderProcessor(apiClient, cfg, terminationChan, opsTracker),
 	}
 }
 

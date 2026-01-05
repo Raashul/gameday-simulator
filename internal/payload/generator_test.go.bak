@@ -87,8 +87,9 @@ func createSmallBoundaryConfig() (*config.Config, *config.PayloadData) {
 					{-96.805, 32.800},
 					{-96.805, 32.780},
 					{-96.790, 32.780},
-					{-96.790, 32.800},
-					{-96.805, 32.800},
+						{-96.790, 32.800},
+						{-96.805, 32.800},
+					},
 				},
 			},
 		},
@@ -194,8 +195,8 @@ func TestIsPointInPolygon(t *testing.T) {
 		{-96.81, 32.80},
 	}
 
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
 	tests := []struct {
 		name     string
@@ -292,8 +293,8 @@ func TestIsPointInPolygon(t *testing.T) {
 
 // TestIsPolylineInBoundary tests full polyline boundary validation
 func TestIsPolylineInBoundary(t *testing.T) {
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
 	tests := []struct {
 		name     string
@@ -364,20 +365,17 @@ func TestIsPolylineInBoundary_NoBoundary(t *testing.T) {
 			Location:          "US-EAST-1",
 			POCOrder:          "POC-TEST-001",
 			OrderNumberPrefix: "ORD-TEST-",
-		},
-	}
-
-	payloadData := &config.PayloadData{
-		BasePolyline: config.BasePolyline{
-			Coordinates: [][]float64{
-				{-96.80, 32.79},
-				{-96.80, 32.78},
+			BasePolyline: config.BasePolyline{
+				Coordinates: [][]float64{
+					{-96.80, 32.79},
+					{-96.80, 32.78},
+				},
 			},
+			// No boundary configured
 		},
-		// No boundary configured
 	}
 
-	gen := NewGenerator(cfg, payloadData)
+	gen := NewGenerator(cfg)
 
 	// Any polyline should be valid when no boundary exists
 	polyline := [][]float64{
@@ -392,8 +390,8 @@ func TestIsPolylineInBoundary_NoBoundary(t *testing.T) {
 
 // TestGeneratePolyline_Offset tests that polylines are properly offset
 func TestGeneratePolyline_Offset(t *testing.T) {
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
 	// Generate first polyline at (0, 0)
 	first := gen.generatePolyline(0)
@@ -406,7 +404,7 @@ func TestGeneratePolyline_Offset(t *testing.T) {
 	}
 
 	// First polyline should match base coordinates (no offset for row 0, col 0)
-	baseCoords := payloadData.BasePolyline.Coordinates
+	baseCoords := cfg.Payload.BasePolyline.Coordinates
 	for i, coord := range first.Coordinates {
 		if i < len(baseCoords) {
 			// The first polyline starts at col 0, so longitude offset should be 0
@@ -423,7 +421,7 @@ func TestGeneratePolyline_Offset(t *testing.T) {
 	}
 
 	// Second polyline should have longitude offset by delta.Longitude
-	deltaLng := payloadData.Delta.Longitude
+	deltaLng := cfg.Payload.Delta.Longitude
 	for i, coord := range second.Coordinates {
 		if i < len(baseCoords) {
 			expectedLng := baseCoords[i][0] + deltaLng
@@ -436,8 +434,8 @@ func TestGeneratePolyline_Offset(t *testing.T) {
 
 // TestGeneratePolyline_GeometryType tests that geometry type is correctly set
 func TestGeneratePolyline_GeometryType(t *testing.T) {
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
 	geom := gen.generatePolyline(0)
 
@@ -445,16 +443,16 @@ func TestGeneratePolyline_GeometryType(t *testing.T) {
 		t.Errorf("Geometry type = %s, expected LineString", geom.Type)
 	}
 
-	if len(geom.Coordinates) != len(payloadData.BasePolyline.Coordinates) {
+	if len(geom.Coordinates) != len(cfg.Payload.BasePolyline.Coordinates) {
 		t.Errorf("Coordinates count = %d, expected %d",
-			len(geom.Coordinates), len(payloadData.BasePolyline.Coordinates))
+			len(geom.Coordinates), len(cfg.Payload.BasePolyline.Coordinates))
 	}
 }
 
 // TestZigzagPattern tests the zigzag crawl pattern behavior
 func TestZigzagPattern(t *testing.T) {
-	cfg, payloadData := createSmallBoundaryConfig()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createSmallBoundaryConfig()
+	gen := NewGenerator(cfg)
 
 	// Track the column positions to verify zigzag pattern
 	type position struct {
@@ -490,11 +488,11 @@ func TestZigzagPattern(t *testing.T) {
 
 // TestRowStacking tests that rows are properly stacked vertically
 func TestRowStacking(t *testing.T) {
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
-	polylineHeight := calculatePolylineHeight(payloadData.BasePolyline.Coordinates)
-	expectedRowSpacing := polylineHeight + payloadData.Delta.Latitude
+	polylineHeight := calculatePolylineHeight(cfg.Payload.BasePolyline.Coordinates)
+	expectedRowSpacing := polylineHeight + cfg.Payload.Delta.Latitude
 
 	// Verify row spacing formula is correct
 	if !floatEquals(gen.polylineHeight, polylineHeight, 1e-10) {
@@ -502,7 +500,7 @@ func TestRowStacking(t *testing.T) {
 	}
 
 	// Verify the row spacing formula
-	expectedFormula := polylineHeight + payloadData.Delta.Latitude
+	expectedFormula := polylineHeight + cfg.Payload.Delta.Latitude
 	if !floatEquals(expectedRowSpacing, expectedFormula, 1e-10) {
 		t.Errorf("Row spacing = %v, expected %v", expectedRowSpacing, expectedFormula)
 	}
@@ -516,7 +514,7 @@ func TestRowStacking(t *testing.T) {
 	if polylineHeight < 0 {
 		t.Error("Polyline height should not be negative")
 	}
-	if payloadData.Delta.Latitude < 0 {
+	if cfg.Payload.Delta.Latitude < 0 {
 		t.Error("Delta latitude should not be negative")
 	}
 }
@@ -575,8 +573,8 @@ func TestRowStackingCalculation(t *testing.T) {
 
 // TestGenerateAll_TypeDistribution tests correct distribution of order types
 func TestGenerateAll_TypeDistribution(t *testing.T) {
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
 	payloads := gen.GenerateAll()
 
@@ -603,8 +601,8 @@ func TestGenerateAll_TypeDistribution(t *testing.T) {
 
 // TestGenerateAll_GeometryPresent tests that all payloads have geometry
 func TestGenerateAll_GeometryPresent(t *testing.T) {
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
 	payloads := gen.GenerateAll()
 
@@ -626,13 +624,13 @@ func TestGenerateAll_GeometryPresent(t *testing.T) {
 
 // TestGenerateAll_AllWithinBoundary tests that all generated polylines fall within boundary
 func TestGenerateAll_AllWithinBoundary(t *testing.T) {
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
 	payloads := gen.GenerateAll()
 
 	// Create a fresh generator for validation
-	validationGen := NewGenerator(cfg, payloadData)
+	validationGen := NewGenerator(cfg)
 
 	for i, p := range payloads {
 		if p.Geometry == nil {
@@ -648,8 +646,8 @@ func TestGenerateAll_AllWithinBoundary(t *testing.T) {
 
 // TestGenerateAll_NonOverlapping tests that no two polylines share the same position
 func TestGenerateAll_NonOverlapping(t *testing.T) {
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
 	payloads := gen.GenerateAll()
 
@@ -678,8 +676,8 @@ func TestGenerateAll_NonOverlapping(t *testing.T) {
 
 // TestGenerateAll_UniqueOrderNumbers tests that all order numbers are unique
 func TestGenerateAll_UniqueOrderNumbers(t *testing.T) {
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
 	payloads := gen.GenerateAll()
 
@@ -694,8 +692,8 @@ func TestGenerateAll_UniqueOrderNumbers(t *testing.T) {
 
 // TestOrderNumberFormat tests the format of generated order numbers
 func TestOrderNumberFormat(t *testing.T) {
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
 	payloads := gen.GenerateAll()
 
@@ -709,8 +707,8 @@ func TestOrderNumberFormat(t *testing.T) {
 
 // TestCoordinateRanges tests that coordinates fall within valid WGS84 ranges
 func TestCoordinateRanges(t *testing.T) {
-	cfg, payloadData := createTestConfigWithGeo()
-	gen := NewGenerator(cfg, payloadData)
+	cfg := createTestConfigWithGeo()
+	gen := NewGenerator(cfg)
 
 	payloads := gen.GenerateAll()
 

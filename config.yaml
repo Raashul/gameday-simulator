@@ -10,25 +10,7 @@ payload:
   orderNumberPrefix: "ORD-2024-"
   customFields:
     priority: "normal"
-    source: "simulator"
-  basePolyline:
-    coordinates:
-      - [-96.79943798188481, 32.795102753983585]
-      - [-96.79927289435462, 32.78885767285452]
-      - [-96.79811728164334, 32.780252620552886]
-  delta:
-    longitude: 0.001
-    latitude: 0.001
-  boundary:
-    coordinates:
-      - - [ -96.80150415798052, 32.79596775075609] 
-        - [ -96.80150415798052,
-              32.74600206482641]
-        - [ -96.79217605335973,
-              32.74600206482641]
-        - [ -96.79217605335973,
-              32.79596775075609]
-        - [ -96.80150415798052, 32.79596775075609] 
+    source: "simulator" 
 intervals:
   betweenCreates: 2s
   afterCreateBeforeGet: 5s

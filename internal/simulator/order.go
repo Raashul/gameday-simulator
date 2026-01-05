@@ -8,6 +8,7 @@ import (
 	"gameday-sim/internal/api"
 	"gameday-sim/internal/config"
 	"gameday-sim/internal/payload"
+	"gameday-sim/internal/utils"
 )
 
 // TerminationRequest represents an order that needs to be terminated
@@ -30,14 +31,16 @@ type OrderProcessor struct {
 	apiClient       *api.Client
 	config          *config.Config
 	terminationChan chan<- TerminationRequest
+	opsTracker      *utils.OperationsTracker
 }
 
 // NewOrderProcessor creates a new order processor
-func NewOrderProcessor(apiClient *api.Client, cfg *config.Config, terminationChan chan<- TerminationRequest) *OrderProcessor {
+func NewOrderProcessor(apiClient *api.Client, cfg *config.Config, terminationChan chan<- TerminationRequest, opsTracker *utils.OperationsTracker) *OrderProcessor {
 	return &OrderProcessor{
 		apiClient:       apiClient,
 		config:          cfg,
 		terminationChan: terminationChan,
+		opsTracker:      opsTracker,
 	}
 }
 
@@ -59,6 +62,14 @@ func (p *OrderProcessor) ProcessOrder(ctx context.Context, pl payload.OrderPaylo
 
 	result.OrderID = createResp.OrderID
 	result.State = payload.StateCreated
+
+	// Track the order ID for cleanup purposes
+	if p.opsTracker != nil {
+		if err := p.opsTracker.TrackOrder(createResp.OrderID); err != nil {
+			// Log error but don't fail the order creation
+			fmt.Printf("Warning: failed to track order ID %s: %v\n", createResp.OrderID, err)
+		}
+	}
 
 	// Step 2: Wait and poll for acceptance
 	if err := p.waitForAcceptance(ctx, createResp.OrderID); err != nil {

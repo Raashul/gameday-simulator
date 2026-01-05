@@ -32,9 +32,6 @@ type PayloadConfig struct {
 	POCOrder          string                 `yaml:"pocOrder"`
 	OrderNumberPrefix string                 `yaml:"orderNumberPrefix"`
 	CustomFields      map[string]interface{} `yaml:"customFields"`
-	BasePolyline      BasePolyline           `yaml:"basePolyline"`
-	Delta             CoordinateDelta        `yaml:"delta"`
-	Boundary          PolygonBoundary        `yaml:"boundary"`
 }
 
 // BasePolyline represents the base GeoJSON polyline coordinates
