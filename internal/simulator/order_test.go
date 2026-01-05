@@ -137,7 +137,7 @@ func TestNewOrderProcessor(t *testing.T) {
 	cfg.API.BaseURL = server.URL
 	client := api.NewClient(cfg, nil) // No auth needed for tests
 
-	processor := NewOrderProcessor(client, cfg, terminationChan)
+	processor := NewOrderProcessor(client, cfg, terminationChan, nil) // No ops tracker for tests
 
 	if processor == nil {
 		t.Error("NewOrderProcessor returned nil")
